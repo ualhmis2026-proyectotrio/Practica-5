@@ -13,13 +13,30 @@ pipeline {
       }
     }
     
+    stage('Compile, Test, Package') {
+      steps {
+        sh "mvn clean package"
+      }
+      post {
+        always { 
+          junit '**/target/surefire-reports/TEST-*.xml'
+          archiveArtifacts '**/target/*.jar'
+          jacoco( 
+            execPattern: '**/target/jacoco.exec',
+            classPattern: '**/target/classes',
+            sourcePattern: '**/src/',
+            exclusionPattern: '**/test/'
+          )
+          publishCoverage adapters: [jacocoAdapter('**/target/site/jacoco/jacoco.xml')]
+        }
+      }
+    }
+    
     stage ('Analysis') {
       steps {
-        // Warnings next generation plugin required
-       withCredentials([string(credentialsId: 'nvd-api-key', variable: 'NVD_API_KEY')]) {
-          // Ejecutamos 'site' pasándole la API Key a Maven
+        withCredentials([string(credentialsId: 'nvd-api-key', variable: 'NVD_API_KEY')]) {
           sh 'mvn site -DnvdApiKey=$NVD_API_KEY'
-       }
+        }
       }
       post {
         success {
@@ -47,35 +64,13 @@ pipeline {
     
     stage('SonarQube Analysis') {
       steps {
-        // Conecta con el servidor que has configurado
         withSonarQubeEnv('servidor_sonarqube') {
-          // Extrae el token de forma segura
           withCredentials([string(credentialsId: 'sonar_server', variable: 'SONAR_LOGIN_TOKEN')]) {
-            // Lanza el análisis a tu servidor en Azure
-            sh 'mvn clean verify sonar:sonar -Dsonar.login=$SONAR_LOGIN_TOKEN'
+            sh 'mvn verify sonar:sonar -Dsonar.login=$SONAR_LOGIN_TOKEN' 
           }
         }
       }
     }
     
-    stage('Compile, Test, Package') {
-      steps {
-        // Ejecuta clean y package (incluye compile y test)
-        sh "mvn clean package"
-      }
-      post {
-        success {
-          junit '**/target/surefire-reports/TEST-*.xml'
-          archiveArtifacts '**/target/*.jar'
-          jacoco( 
-            execPattern: '**/target/jacoco.exec',
-            classPattern: '**/target/classes',
-            sourcePattern: '**/src/',
-            exclusionPattern: '**/test/'
-          )
-          publishCoverage adapters: [jacocoAdapter('**/target/site/jacoco/jacoco.xml')]
-        }
-      }
-    }
   }
 }
